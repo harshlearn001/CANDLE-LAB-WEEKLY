@@ -1,0 +1,56 @@
+# =========================
+# PYTHON
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# =========================
+# ENV / IDE
+# =========================
+.env
+.venv/
+venv/
+env/
+.vscode/
+.idea/
+
+# =========================
+# OS FILES
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# LARGE DATA (IMPORTANT)
+# =========================
+
+# Ignore generated signals
+analysis/
+
+# Ignore raw data
+data/
+
+# Ignore outputs
+*.csv
+*.xlsx
+*.zip
+
+# =========================
+# LOGS
+# =========================
+*.log
+logs/
+
+# =========================
+# BACKUPS
+# =========================
+*.bak
+*.old
+
+# =========================
+# KEEP STRUCTURE
+# =========================
+!analysis/.gitkeep
+!data/.gitkeep
