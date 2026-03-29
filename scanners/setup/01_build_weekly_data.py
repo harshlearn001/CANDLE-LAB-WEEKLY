@@ -1,7 +1,7 @@
 import pandas as pd
 from pathlib import Path
 
-print("📅 BUILDING WEEKLY DATA 🔥\n")
+print("📅 BUILDING WEEKLY DATA (HOLIDAY SMART) 🔥\n")
 
 # ==============================
 # PATHS
@@ -9,8 +9,30 @@ print("📅 BUILDING WEEKLY DATA 🔥\n")
 DAILY_DIR = Path(r"H:\MarketForge\data\master\Equity_stock_master")
 OUT_DIR   = Path(r"H:\CANDLE-LAB-WEEKLY\data\weekly")
 
+# 🔥 HOLIDAY FILE
+HOLIDAY_FILE = Path(r"H:\CANDLE-LAB\config\nse_holidays_2026.csv")
+
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
+# ==============================
+# LOAD HOLIDAYS
+# ==============================
+holiday_df = pd.read_csv(HOLIDAY_FILE)
+holiday_df["DATE"] = pd.to_datetime(holiday_df["DATE"])
+HOLIDAYS = set(holiday_df["DATE"])
+
+# ==============================
+# FUNCTION: GET LAST TRADING DAY
+# ==============================
+def get_last_trading_day(group):
+    valid = group[~group["DATE"].isin(HOLIDAYS)]
+    if valid.empty:
+        return None
+    return valid.iloc[-1]
+
+# ==============================
+# PROCESS FILES
+# ==============================
 files = list(DAILY_DIR.glob("*.csv"))
 
 for file in files:
@@ -40,32 +62,50 @@ for file in files:
             continue
 
         # ==============================
-        # HANDLE VOLUME SAFELY
+        # HANDLE VOLUME
         # ==============================
         if "TOTTRDQTY" not in df.columns:
             df["TOTTRDQTY"] = 0
 
         # ==============================
-        # WEEKLY RESAMPLE
+        # CREATE WEEK GROUP (MONDAY BASE)
         # ==============================
-        weekly = df.resample("W", on="DATE").agg({
-            "OPEN": "first",
-            "HIGH": "max",
-            "LOW": "min",
-            "CLOSE": "last",
-            "TOTTRDQTY": "sum"
-        }).dropna()
+        df["WEEK"] = df["DATE"].dt.to_period("W-MON")
+
+        weekly_rows = []
+
+        # ==============================
+        # BUILD WEEKLY (SMART)
+        # ==============================
+        for _, g in df.groupby("WEEK"):
+            g = g.sort_values("DATE")
+
+            last_row = get_last_trading_day(g)
+            if last_row is None:
+                continue
+
+            weekly_rows.append({
+                "date": last_row["DATE"],                 # 🔥 correct trading day
+                "open": g["OPEN"].iloc[0],
+                "high": g["HIGH"].max(),
+                "low": g["LOW"].min(),
+                "close": last_row["CLOSE"],               # 🔥 correct close
+                "volume": g["TOTTRDQTY"].sum()
+            })
+
+        weekly = pd.DataFrame(weekly_rows)
 
         if weekly.empty:
             print(f"⚠️ Empty weekly → {file.stem}")
             continue
 
-        # Rename to standard format
-        weekly.columns = ["open", "high", "low", "close", "volume"]
-
+        # ==============================
+        # SAVE
+        # ==============================
         symbol = file.stem
         out_file = OUT_DIR / f"{symbol}.csv"
 
+        weekly.sort_values("date", inplace=True)
         weekly.to_csv(out_file, index=False)
 
         print(f"✅ {symbol} → {len(weekly)} weeks")
@@ -73,4 +113,4 @@ for file in files:
     except Exception as e:
         print(f"❌ ERROR → {file.stem} | {e}")
 
-print("\n🔥 WEEKLY DATA READY")
+print("\n🔥 WEEKLY BUILD COMPLETE (HOLIDAY SMART)")
