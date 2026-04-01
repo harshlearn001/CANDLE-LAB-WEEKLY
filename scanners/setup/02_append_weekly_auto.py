@@ -15,7 +15,7 @@ DAILY_DIR = Path(r"H:\MarketForge\data\master\Equity_stock_master")
 OUT_DIR   = Path(r"H:\CANDLE-LAB-WEEKLY\data\weekly")
 
 # 🔥 HOLIDAY FILE
-HOLIDAY_FILE = Path(r"H:\CANDLE-LAB\config\nse_holidays_2026.csv")
+HOLIDAY_FILE = "H:\\CANDLE-LAB-WEEKLY\\config\\nse_holidays_2026.csv"
 
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
