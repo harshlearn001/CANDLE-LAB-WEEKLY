@@ -12,7 +12,7 @@ REM ======================================
 echo.
 echo [BUILD WEEKLY DATA]
 cd /d H:\CANDLE-LAB-WEEKLY\scanners\setup
-python 01_build_weekly_data.py
+#python 01_build_weekly_data.py
 
 REM ======================================
 REM TREND + MOMENTUM
