@@ -21,12 +21,15 @@ results = []
 # RSI FUNCTION
 # ==============================
 def calculate_rsi(df, period=14):
-    delta = df["close"].diff()
+    delta = df["CLOSE"].diff()
 
-    gain = (delta.where(delta > 0, 0)).rolling(period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
 
-    rs = gain / loss
+    avg_gain = gain.rolling(period).mean()
+    avg_loss = loss.rolling(period).mean()
+
+    rs = avg_gain / avg_loss
     df["RSI"] = 100 - (100 / (1 + rs))
 
     return df
@@ -41,6 +44,26 @@ for file in files:
     try:
         df = pd.read_csv(file)
 
+        # 🔥 Normalize columns
+        df.columns = df.columns.str.strip().str.upper()
+
+        df = df.rename(columns={
+            "CLOSE_PRICE": "CLOSE",
+            "CLOSE": "CLOSE"
+        })
+
+        # ❗ Check column exists
+        if "CLOSE" not in df.columns:
+            print(f"{file.stem} → CLOSE missing ❌")
+            continue
+
+        # 🔥 Convert to numeric (CRITICAL)
+        df["CLOSE"] = pd.to_numeric(df["CLOSE"], errors="coerce")
+
+        # 🔥 Clean data
+        df = df.dropna(subset=["CLOSE"])
+        df = df[df["CLOSE"] > 0]
+
         if len(df) < 20:
             continue
 
@@ -48,6 +71,10 @@ for file in files:
 
         last = df.iloc[-1]
         rsi = last["RSI"]
+
+        if pd.isna(rsi):
+            print(f"{file.stem} → RSI NaN ❌")
+            continue
 
         if rsi < 30:
             signal = "OVERSOLD"
@@ -62,10 +89,10 @@ for file in files:
             "Signal": signal
         })
 
-        print(f"{file.stem} → {signal}")
+        print(f"{file.stem} → RSI {round(rsi,2)} → {signal}")
 
-    except:
-        continue
+    except Exception as e:
+        print(f"{file.stem} → ERROR {e}")
 
 # ==============================
 # SAVE

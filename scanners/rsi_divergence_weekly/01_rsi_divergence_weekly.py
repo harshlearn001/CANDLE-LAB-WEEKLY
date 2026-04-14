@@ -2,7 +2,7 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 
-print("📉 WEEKLY RSI DIVERGENCE SCANNER 🔥\n")
+print("📉 WEEKLY RSI DIVERGENCE SCANNER (FINAL PRO) 🔥\n")
 
 # ==============================
 # PATHS
@@ -21,19 +21,52 @@ bull_results = []
 bear_results = []
 
 # ==============================
-# RSI FUNCTION
+# NORMALIZE
+# ==============================
+def normalize(df):
+    df.columns = df.columns.str.strip().str.upper()
+
+    df = df.rename(columns={
+        "CLOSE_PRICE": "CLOSE",
+        "OPEN_PRICE": "OPEN",
+        "HI_PRICE": "HIGH",
+        "LO_PRICE": "LOW",
+        "TRADE_DATE": "DATE"
+    })
+
+    return df
+
+# ==============================
+# RSI
 # ==============================
 def calculate_rsi(df, period=14):
-    delta = df["close"].diff()
+    delta = df["CLOSE"].diff()
 
-    gain = (delta.where(delta > 0, 0)).rolling(period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
 
-    rs = gain / loss
+    avg_gain = gain.rolling(period).mean()
+    avg_loss = loss.rolling(period).mean()
+
+    rs = avg_gain / avg_loss
     df["RSI"] = 100 - (100 / (1 + rs))
 
     return df
 
+# ==============================
+# SWINGS
+# ==============================
+def find_swings(df, window=3):
+
+    df['SWING_LOW'] = df['LOW'][
+        df['LOW'] == df['LOW'].rolling(window, center=True).min()
+    ]
+
+    df['SWING_HIGH'] = df['HIGH'][
+        df['HIGH'] == df['HIGH'].rolling(window, center=True).max()
+    ]
+
+    return df
 
 # ==============================
 # SCAN
@@ -43,63 +76,73 @@ files = list(DATA_DIR.glob("*.csv"))
 for file in files:
     try:
         df = pd.read_csv(file)
+        df = normalize(df)
 
-        if len(df) < 30:
+        if not {'CLOSE','HIGH','LOW'}.issubset(df.columns):
             continue
 
+        # 🔥 Clean data
+        df['CLOSE'] = pd.to_numeric(df['CLOSE'], errors='coerce')
+        df['HIGH']  = pd.to_numeric(df['HIGH'], errors='coerce')
+        df['LOW']   = pd.to_numeric(df['LOW'], errors='coerce')
+
+        df = df.dropna(subset=['CLOSE','HIGH','LOW'])
+        df = df[df['CLOSE'] > 0]
+
+        if len(df) < 50:
+            continue
+
+        df = df.sort_values("DATE").tail(200)
+
         df = calculate_rsi(df)
+        df = find_swings(df)
 
-        # Last 5 candles (simple swing detection)
-        recent = df.tail(5)
+        swing_lows = df.dropna(subset=['SWING_LOW'])
+        swing_highs = df.dropna(subset=['SWING_HIGH'])
 
-        # --------------------------
-        # PRICE SWINGS
-        # --------------------------
-        price_low1 = recent.iloc[1]["low"]
-        price_low2 = recent.iloc[3]["low"]
-
-        price_high1 = recent.iloc[1]["high"]
-        price_high2 = recent.iloc[3]["high"]
-
-        # --------------------------
-        # RSI SWINGS
-        # --------------------------
-        rsi_low1 = recent.iloc[1]["RSI"]
-        rsi_low2 = recent.iloc[3]["RSI"]
-
-        rsi_high1 = recent.iloc[1]["RSI"]
-        rsi_high2 = recent.iloc[3]["RSI"]
+        signal = None
 
         # ==========================
-        # BULLISH DIVERGENCE
+        # BULLISH
         # ==========================
-        if (
-            price_low2 < price_low1 and     # lower low in price
-            rsi_low2 > rsi_low1             # higher low in RSI
-        ):
+        if len(swing_lows) >= 2:
+            prev_low = swing_lows.iloc[-2]
+            curr_low = swing_lows.iloc[-1]
+
+            if (len(df) - df.index.get_loc(curr_low.name)) <= 5:
+                if curr_low['LOW'] < prev_low['LOW'] and curr_low['RSI'] > prev_low['RSI']:
+                    signal = "BULLISH"
+
+        # ==========================
+        # BEARISH
+        # ==========================
+        if len(swing_highs) >= 2:
+            prev_high = swing_highs.iloc[-2]
+            curr_high = swing_highs.iloc[-1]
+
+            if (len(df) - df.index.get_loc(curr_high.name)) <= 5:
+                if curr_high['HIGH'] > prev_high['HIGH'] and curr_high['RSI'] < prev_high['RSI']:
+                    signal = "BEARISH"
+
+        # ==========================
+        # FINAL OUTPUT
+        # ==========================
+        if signal == "BULLISH":
             print(f"🟢 Bullish → {file.stem}")
-
             bull_results.append({
                 "Symbol": file.stem,
                 "Type": "Bullish Divergence"
             })
 
-        # ==========================
-        # BEARISH DIVERGENCE
-        # ==========================
-        if (
-            price_high2 > price_high1 and   # higher high in price
-            rsi_high2 < rsi_high1           # lower high in RSI
-        ):
+        elif signal == "BEARISH":
             print(f"🔴 Bearish → {file.stem}")
-
             bear_results.append({
                 "Symbol": file.stem,
                 "Type": "Bearish Divergence"
             })
 
-    except:
-        continue
+    except Exception as e:
+        print(f"{file.stem} → ERROR {e}")
 
 # ==============================
 # SAVE
